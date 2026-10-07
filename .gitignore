@@ -1,0 +1,7 @@
+# Snapshot files
+directory-info.last
+directory-info.new
+
+# Test directories
+dir/
+malicious_dir/
