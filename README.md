@@ -1,200 +1,121 @@
 # OS Lab 2 - Antivirus
-A shell-based antivirus. A daemon (`antivirusd.sh`) watches a directory, and when
-something changes it scans the files, quarantines the malicious ones, and
-deletes them from the watched directory. A second script (`restore.sh`) lets a
-user review the quarantine and either restore or permanently delete each file.
-A `Makefile` runs everything with short commands.
+`antivirusd.sh` watches a directory and, when it changes, scans the files in it,
+quarantines the malicious ones and deletes them from the watched directory.
+`restore.sh` lets a user review the quarantine and restore or delete each file.
+The `Makefile` runs both with short commands.
 
 ## Folder hierarchy
 
 ```
-os_lab2_antivirus/
-├── antivirusd.sh        # the antivirus daemon (polling loop + scanner)
+.
+├── antivirusd.sh        # antivirus daemon (polling loop + scanner)
 ├── restore.sh           # interactive restore / delete tool
 ├── Makefile             # targets: antivirus, restore, prepare
-├── README.md            # this file
-├── .gitignore           # keeps generated files out of git
+├── README.md
+├── .gitignore
 │
 │   Created at runtime (not committed):
-├── dir/                 # the monitored directory (files only, no subdirectories)
-├── malicious_dir/       # quarantine directory (created by `make prepare`)
-├── directory-info.last  # snapshot taken at the last scan
-└── directory-info.new   # snapshot taken on the current check
+├── dir/                 # monitored directory (files only)
+├── malicious_dir/       # quarantine directory
+└── directory-info.last / directory-info.new   # directory snapshots
 ```
-
-## How it works
-
-### antivirusd.sh
-
-```
-./antivirusd.sh <dir> <malicious_dir> <interval-secs>
-```
-
-1. **Argument checks.** It needs exactly three arguments, both directories must
-   exist, and the interval must be a positive integer. Otherwise it prints a
-   usage or error message to stderr and exits with status 1.
-2. **Change detection.** Every cycle it runs `ls -l <dir> > directory-info.new`
-   and compares it with `directory-info.last` using `cmp -s`.
-   - If `directory-info.last` does not exist (first run), it scans immediately.
-   - If the two files are identical, it sleeps for the interval and checks
-     again. No scan happens.
-   - If they differ, it copies `directory-info.new` to `directory-info.last`
-     and scans.
-3. **Scan.** For every regular file directly inside `<dir>`, the file is
-   malicious if either rule matches (see the next section). For each malicious
-   file the daemon:
-   1. prints `<file> is malicious and it is DELETED` (the file's base name),
-   2. copies the file into `<malicious_dir>`,
-   3. deletes the original only if the copy succeeded.
-
-### What counts as malicious, and where the lists are defined
-
-Both lists are hardcoded in `antivirusd.sh`, inside the scan loop:
-
-- **Flagged extensions** (`.exe`, `.bat`, `.vbs`, `.scr`, `.ps1`): the patterns in the
-  `case` statement that sets `is_malicious=1`.
-- **Flagged keywords** (`virus`, `trojan`, `malware`, `worm`, `ransomware`): the
-  pattern in the `grep -iaEq "..."` command that is only run when the
-  extension did not already match.
-
-To find them quickly: `grep -n 'is_malicious=1\|grep -iaEq' antivirusd.sh`
-
-Rules in detail:
-
-- Extensions are matched exactly as written, so `.EXE` is not flagged.
-- Keywords are matched as case-insensitive substrings of the file's contents
-  (so "earworm" matches "worm"). Binary files are searched as text.
-- A file matching both rules is handled once.
-
-### restore.sh
-
-```
-./restore.sh <dir> <malicious_dir>
-```
-
-1. Same style of argument checks (exactly two existing directories).
-2. If `<malicious_dir>` is empty it prints `No malicious files to review.` and exits.
-3. Otherwise it shows a numbered list of the quarantined files and asks for a
-   number. Non-numeric or out-of-range input is rejected and asked again.
-4. For the chosen file it offers:
-   - **1** restore it to `<dir>`, printing `Restored <file> to <dir>.`
-   - **2** delete it permanently, printing `<file> permanently deleted.`
-   - **3** leave it as-is and go back to the list
-   - **4** quit (an addition, so the user always has a way out)
-5. The list is shown again until the quarantine is empty or the user quits.
-   End of input (Ctrl+D) also exits cleanly.
-
-The daemon and the restore tool must not run at the same time.
 
 ## Prerequisites
 
-- Linux with **bash** (the scripts use bash features such as arrays).
-- **make**
-- **git** (to clone the repository)
-- Standard tools: `ls`, `cmp`, `cp`, `rm`, `grep`, `basename`, `sleep`.
-
-On Ubuntu, bash and the standard tools come preinstalled. Install the rest with:
+Bash, `make` and `git`. Bash and the standard tools (`ls`, `cmp`, `cp`, `rm`,
+`grep`, `basename`, `sleep`) come with Ubuntu. Install the rest with:
 
 ```bash
-sudo apt update
-sudo apt install -y make git
+sudo apt update && sudo apt install -y make git
 ```
 
-## Running it
+## Running
 
-1. Get the code and enter the project folder. **Always run from this folder**,
-   because the snapshot files are created in the current directory:
+Run everything from the project folder, because the snapshot files are created
+in the current directory.
 
-   ```bash
-   git clone <repository-url>
-   cd <repository-folder>
-   chmod +x antivirusd.sh restore.sh
-   ```
+```bash
+git clone <repository-url> && cd <repository-folder>
+chmod +x antivirusd.sh restore.sh
+mkdir -p dir
+```
 
-2. Create the folder to monitor:
-
-   ```bash
-   mkdir -p dir
-   ```
-
-3. **Terminal 1:** start the daemon. `make` creates `malicious_dir` first if it
-   is missing, then runs `antivirusd.sh` with the default arguments:
+1. **Terminal 1:** start the daemon. `make` creates `malicious_dir` if it is missing.
 
    ```bash
    make antivirus
    ```
 
-   Equivalent direct command:
+   (Same as `./antivirusd.sh dir malicious_dir 5`.)
+
+2. **Terminal 2:** create some files.
 
    ```bash
-   ./antivirusd.sh dir malicious_dir 5
+   echo "hello" > dir/clean.txt            # not flagged
+   echo "hello" > dir/setup.exe            # flagged by extension
+   echo "a TROJAN inside" > dir/notes.txt  # flagged by content
    ```
 
-   The first start scans immediately. After that it checks every 5 seconds.
+   Within one interval, Terminal 1 prints `setup.exe is malicious and it is DELETED`
+   and `notes.txt is malicious and it is DELETED`. Both files are now in
+   `malicious_dir`.
 
-4. **Terminal 2:** create some files and watch Terminal 1:
+3. Stop the daemon with `Ctrl+C`.
 
-   ```bash
-   echo "hello" > dir/clean.txt             # not flagged
-   echo "hello" > dir/setup.exe             # flagged by extension
-   echo "a TROJAN inside" > dir/notes.txt   # flagged by content
-   ```
-
-   Within one interval Terminal 1 prints
-   `setup.exe is malicious and it is DELETED` and
-   `notes.txt is malicious and it is DELETED`. Both files are now in
-   `malicious_dir` and gone from `dir`; `clean.txt` is untouched.
-
-5. **Stop the daemon** with `Ctrl+C` in Terminal 1 (or `pkill -f antivirusd.sh`
-   from another terminal).
-
-6. Run the restore tool (with the daemon stopped):
+4. With the daemon stopped, review the quarantine:
 
    ```bash
    make restore
    ```
 
-   Pick a file by its number, then choose 1, 2 or 3. Restoring a file puts it
-   back into `dir`.
+Arguments can be overridden: `make antivirus DIR=<dir> MALICIOUS_DIR=<quarantine> TIME_INTERVAL=<secs>`
+(defaults: `dir`, `malicious_dir`, `5`). `make restore` takes `DIR` and `MALICIOUS_DIR`.
 
-### Changing the arguments
+## How it works
 
-The Makefile uses variables that can be overridden on the command line:
+**antivirusd.sh `<dir> <malicious_dir> <interval-secs>`**
 
-| Variable        | Default         | Meaning                          |
-|-----------------|-----------------|----------------------------------|
-| `DIR`           | `dir`           | directory being monitored        |
-| `MALICIOUS_DIR` | `malicious_dir` | quarantine directory             |
-| `TIME_INTERVAL` | `5`             | seconds between checks           |
+1. Checks the arguments (three, both directories exist, interval is a positive
+   integer) and exits with a message to stderr otherwise.
+2. Every cycle it writes `ls -l <dir>` to `directory-info.new` and compares it with
+   `directory-info.last` using `cmp -s`. If `directory-info.last` does not exist
+   (first run) it scans immediately; if the files are identical it sleeps and
+   checks again.
+3. A scan looks at every regular file directly inside `<dir>`. For each malicious
+   file it prints `<file> is malicious and it is DELETED`, copies it into
+   `<malicious_dir>`, and deletes the original only if the copy succeeded.
+4. After the scan, `directory-info.last` is regenerated with
+   `ls -l <dir> > directory-info.last`, so it reflects the directory after the
+   removals.
 
-```bash
-make antivirus DIR=/tmp/watched MALICIOUS_DIR=/tmp/quarantine TIME_INTERVAL=2
-make restore   DIR=/tmp/watched MALICIOUS_DIR=/tmp/quarantine
-```
+**restore.sh `<dir> <malicious_dir>`**
 
-| Target      | What it does                                                |
-|-------------|-------------------------------------------------------------|
-| `antivirus` | (default) runs `prepare`, then starts the daemon            |
-| `restore`   | runs `prepare`, then starts the restore tool                |
-| `prepare`   | creates the quarantine directory if it does not exist       |
+- Prints `No malicious files to review.` and exits if the quarantine is empty.
+- Otherwise shows a numbered list and asks for a number (invalid input is asked
+  again), then offers: `1` restore to `<dir>` (`Restored <file> to <dir>.`),
+  `2` delete permanently (`<file> permanently deleted.`), `3` go back to the list,
+  `4` quit. `Ctrl+D` also exits.
+- The daemon and the restore tool must not run at the same time.
 
-## Design decisions and limitations
+## Where the flagged lists are defined
 
-- **Snapshots live in the current directory**, not inside the monitored folder,
-  so they are never scanned or listed as changes. Run everything from the
-  project folder so the daemon and the tools agree on where they are.
-- **`ls -l` shows modification time only to the minute.** Two edits within the
-  same minute that leave the file size unchanged produce identical listings and
-  go undetected until the next real change.
-- **The snapshot is updated before the scan.** Files that arrive during a scan
-  show up as a change on the next cycle, so nothing is silently skipped. The
-  trade-off: if the daemon is killed mid-scan, the unscanned files are not
-  rescanned after a restart until the directory changes again. Deleting
-  `directory-info.last` forces a full scan on the next start.
-- After a scan deletes files, the next cycle sees the listing changed and runs
-  one more scan that finds nothing. This is harmless and prints nothing.
-- Only regular files directly inside the monitored directory are handled.
-  Subdirectories are ignored, as are files whose names start with a dot.
-- A file restored with `restore.sh` is flagged again on the next scan if it
-  still matches a rule. A whitelist is not implemented in this version.
-- The bonus tasks (cron job and whitelist) are not implemented in this version.
+Both are hardcoded in `antivirusd.sh`, inside the scan loop. Find them with
+`grep -n 'is_malicious=1\|grep -iaEq' antivirusd.sh`.
+
+- **Extensions** (`.exe`, `.bat`, `.vbs`, `.scr`, `.ps1`): the patterns in the `case`
+  statement. Only the final extension counts and it is matched exactly:
+  `file.txt.scr` is flagged; `file.scr.txt`, `file.exec` and `description.txt` are not.
+- **Keywords** (`virus`, `trojan`, `malware`, `worm`, `ransomware`): the pattern in
+  the `grep -iaEq` command. Matching is case-insensitive and anywhere in the file's
+  contents, even inside a longer word (`wormhole` matches).
+
+## Limitations
+
+- `ls -l` shows modification time only to the minute, so two same-size edits
+  within one minute give identical listings and go unnoticed until the next change.
+- A file that arrives between the scan's file listing and the snapshot is recorded
+  as already seen and is not scanned until the directory changes again.
+- Only regular files directly inside `<dir>` are handled; subdirectories and files
+  whose names start with a dot are ignored.
+- A restored file is flagged again on the next scan if it still matches a rule.
+  The bonus tasks (cron job, whitelist) are not implemented.
