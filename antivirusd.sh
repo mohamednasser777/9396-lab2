@@ -33,8 +33,6 @@ do
         sleep "$time_interval"
         continue
     fi
-
-    cp directory-info.new directory-info.last   
     
     for file in "$dir"/*
     do 
@@ -65,8 +63,9 @@ do
             fi
         fi
 
-    done  
-
+    done 
+     
+    ls -l "$dir" > directory-info.last
     sleep "$time_interval"
 done
     
