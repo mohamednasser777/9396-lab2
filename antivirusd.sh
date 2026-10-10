@@ -40,7 +40,13 @@ do
         then
           continue
         fi    
-   
+
+        name=$(basename "$file")
+        if [ -f whitelist.txt ] && grep -qxF -- "$name" whitelist.txt
+        then
+            continue
+        fi
+        
         is_malicious=0
 
         case "$file" in

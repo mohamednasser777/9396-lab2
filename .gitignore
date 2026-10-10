@@ -5,3 +5,5 @@ directory-info.new
 # Test directories
 dir/
 malicious_dir/
+# Bonus
+whitelist.txt

@@ -72,8 +72,16 @@ do
 
         case "$number" in 
             1)
-                cp "$file" "$dir/" && rm "$file"
-                echo "Restored $name to $dir."
+                if cp "$file" "$dir/" && rm "$file" 
+                then
+                    echo "Restored $name to $dir."
+                    if ! grep qxf -- "$name" whitelist.txt 2>/dev/null
+                    then
+                        echo "$name" >> whitelist.txt
+                    fi
+                else
+                    echo "Could not restore $name." >&2
+                fi
                 break
                  ;;
             2)

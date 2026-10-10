@@ -1,4 +1,5 @@
 # OS Lab 2 - Antivirus
+
 `antivirusd.sh` watches a directory and, when it changes, scans the files in it,
 quarantines the malicious ones and deletes them from the watched directory.
 `restore.sh` lets a user review the quarantine and restore or delete each file.
@@ -17,6 +18,7 @@ The `Makefile` runs both with short commands.
 │   Created at runtime (not committed):
 ├── dir/                 # monitored directory (files only)
 ├── malicious_dir/       # quarantine directory
+├── whitelist.txt        # names of restored (safe) files
 └── directory-info.last / directory-info.new   # directory snapshots
 ```
 
@@ -31,8 +33,8 @@ sudo apt update && sudo apt install -y make git
 
 ## Running
 
-Run everything from the project folder, because the snapshot files are created
-in the current directory.
+Run everything from the project folder, because the snapshot files and the
+whitelist are created in the current directory.
 
 ```bash
 git clone <repository-url> && cd <repository-folder>
@@ -81,9 +83,10 @@ Arguments can be overridden: `make antivirus DIR=<dir> MALICIOUS_DIR=<quarantine
    `directory-info.last` using `cmp -s`. If `directory-info.last` does not exist
    (first run) it scans immediately; if the files are identical it sleeps and
    checks again.
-3. A scan looks at every regular file directly inside `<dir>`. For each malicious
-   file it prints `<file> is malicious and it is DELETED`, copies it into
-   `<malicious_dir>`, and deletes the original only if the copy succeeded.
+3. A scan looks at every regular file directly inside `<dir>`. Files whose names
+   are in `whitelist.txt` are skipped. For each malicious file it prints
+   `<file> is malicious and it is DELETED`, copies it into `<malicious_dir>`, and
+   deletes the original only if the copy succeeded.
 4. After the scan, `directory-info.last` is regenerated with
    `ls -l <dir> > directory-info.last`, so it reflects the directory after the
    removals.
@@ -91,10 +94,12 @@ Arguments can be overridden: `make antivirus DIR=<dir> MALICIOUS_DIR=<quarantine
 **restore.sh `<dir> <malicious_dir>`**
 
 - Prints `No malicious files to review.` and exits if the quarantine is empty.
-- Otherwise shows a numbered list and asks for a number (invalid input is asked
-  again), then offers: `1` restore to `<dir>` (`Restored <file> to <dir>.`),
-  `2` delete permanently (`<file> permanently deleted.`), `3` go back to the list,
-  `4` quit. `Ctrl+D` also exits.
+- Otherwise shows a numbered list `N: name` and asks for a number (invalid input
+  is asked again), then offers: `1` restore to `<dir>`
+  (`Restored <file> to <dir>.`), `2` delete permanently
+  (`<file> permanently deleted.`), `3` go back to the list. `Ctrl+D` exits at any
+  prompt.
+- A restored file is added to the whitelist (see below).
 - The daemon and the restore tool must not run at the same time.
 
 ## Where the flagged lists are defined
@@ -109,6 +114,18 @@ Both are hardcoded in `antivirusd.sh`, inside the scan loop. Find them with
   the `grep -iaEq` command. Matching is case-insensitive and anywhere in the file's
   contents, even inside a longer word (`wormhole` matches).
 
+## Bonus 2: Whitelist
+
+When a file is restored with `restore.sh` (option 1) and the copy succeeds, its
+file name is appended to `whitelist.txt` in the project folder, one name per
+line. A name that is already listed is not added again. During every scan,
+`antivirusd.sh` checks each file's name against `whitelist.txt` (`grep -qxF`, an
+exact whole-line match) before applying the extension and keyword rules, and
+skips the file if it is listed. The file stays on disk, so the whitelist survives
+stopping and restarting the daemon. Matching is by file name only, so a different
+file with the same name is also skipped. To remove a file from the whitelist,
+delete its line from `whitelist.txt`.
+
 ## Limitations
 
 - `ls -l` shows modification time only to the minute, so two same-size edits
@@ -117,5 +134,4 @@ Both are hardcoded in `antivirusd.sh`, inside the scan loop. Find them with
   as already seen and is not scanned until the directory changes again.
 - Only regular files directly inside `<dir>` are handled; subdirectories and files
   whose names start with a dot are ignored.
-- A restored file is flagged again on the next scan if it still matches a rule.
-  The bonus tasks (cron job, whitelist) are not implemented.
+- Bonus 1 (cron job) is not implemented.
