@@ -67,7 +67,6 @@ do
         echo "1: Restore this file back into dir (it was a false positive)"
         echo "2: Permanently delete this file from malicious_dir (it was genuinely malicious)"
         echo "3: Go back"
-        echo "4: Quit Program"
         printf '> '
         read -r number || exit 0
 
@@ -84,9 +83,6 @@ do
                 ;;
             3)
                 break
-                ;;
-            4)
-                exit 0
                 ;;
             *)
                 echo "invalid option" >&2
